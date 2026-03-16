@@ -755,7 +755,6 @@ function applyAddressToFilters(item) {
   const a = item.address || {};
 
   const region = (a.state || "").trim();
-  const city = (a.city || a.town || a.village || a.hamlet || "").trim();
 
   const rawCounty = (a.county || a.province || "").trim();
   const provinceName = rawCounty
@@ -772,7 +771,6 @@ function applyAddressToFilters(item) {
 
   if (region) state.manualRegions.add(region);
   if (provinceCode) state.selectedProvinces.add(provinceCode);
-  if (city) state.selectedCities.add(city);
 
   recomputeDerivedRegions();
 
@@ -780,7 +778,7 @@ function applyAddressToFilters(item) {
   cascadeGeoOptions();
 
   ddProvince.setSelected([...state.selectedProvinces], { silent: true });
-  ddCity.setSelected([...state.selectedCities], { silent: true });
+  ddCity.setSelected([], { silent: true });
 
   syncGroups();
   applyFilters();
