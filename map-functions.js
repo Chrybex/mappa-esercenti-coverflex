@@ -976,11 +976,20 @@ function renderNearbyLocations(lat, lon) {
 
       els.kpiTotal.textContent = geojson.features.length.toLocaleString("it-IT");
 
-      state.items = geojson.features.map((f) => {
-        const [lng, lat] = f.geometry.coordinates;
-        const marker = L.marker([lat, lng]).bindPopup(popupHtml(f.properties || {}));
-        return { feature: f, marker };
-      });
+     state.items = geojson.features.map((f) => {
+
+  if (f.properties?.address_city) {
+    const c = f.properties.address_city.trim().toLowerCase();
+    f.properties.address_city = c.charAt(0).toUpperCase() + c.slice(1);
+  }
+
+  const [lng, lat] = f.geometry.coordinates;
+
+  const marker = L.marker([lat, lng])
+    .bindPopup(popupHtml(f.properties || {}));
+
+  return { feature: f, marker };
+});
 
       const bounds = L.latLngBounds(state.items.map(x => x.marker.getLatLng())).pad(0.08);
       state.initialBounds = bounds;
