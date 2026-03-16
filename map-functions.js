@@ -31,9 +31,9 @@
       results: document.getElementById("results"),
       status: document.getElementById("status"),
       searchWrap: document.querySelector(".search-wrap"),
-      nearbyBox: document.getElementById("nearby-box"),
-      nearbyMeta: document.getElementById("nearby-meta"),
-      nearbyList: document.getElementById("nearby-list"),
+      nearbyRadius: document.getElementById("nearby-radius"),
+      nearbyCount: document.getElementById("nearby-count"),
+      nearbyList: document.getElementById("nearby-list")
     };
 
     const state = {
