@@ -47,6 +47,8 @@
       selectedProvinces: new Set(),
       selectedCities: new Set(),
       groupsTouched: false,
+      lastSearchLat: null,
+      lastSearchLon: null,
     };
 
     const norm = (s) => (s ?? "").toString().trim().toLowerCase();
@@ -567,6 +569,14 @@
       state.selectedProvinces.clear();
       state.selectedCities.clear();
       state.groupsTouched = false;
+     state.lastSearchLat = null;
+state.lastSearchLon = null;
+els.nearbyCount.textContent = "0";
+els.nearbyList.innerHTML = `
+  <div class="nearby-empty">
+    Cerca un indirizzo per vedere gli esercenti più vicini.
+  </div>
+`;
 
       clearSearchResults();
       clearSearchMarker();
@@ -715,7 +725,7 @@ function setSearchMarker(lat, lon, label) {
       setActiveResult(0);
     }
 
-    function chooseDirectAddress(item) {
+   function chooseDirectAddress(item) {
   const lat = parseFloat(item.lat);
   const lon = parseFloat(item.lon);
 
@@ -728,11 +738,13 @@ function setSearchMarker(lat, lon, label) {
   clearSearchResults();
   setSearchMarker(lat, lon, item.display_name);
 
+  state.lastSearchLat = lat;
+  state.lastSearchLon = lon;
+
   applyAddressToFilters(item);
+  renderNearbyLocations(lat, lon);
 
-  renderNearbyLocations(lat, lon, 5);
-
-  setStatus("Indirizzo trovato e filtri aggiornati.");
+  setStatus("Indirizzo trovato.");
 }
 
     async function fetchAddresses(query, limit = 5) {
@@ -793,16 +805,16 @@ function haversineKm(lat1, lon1, lat2, lon2) {
   const dLon = toRad(lon2 - lon1);
 
   const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.sin(dLat / 2) ** 2 +
     Math.cos(toRad(lat1)) *
     Math.cos(toRad(lat2)) *
-    Math.sin(dLon / 2) *
-    Math.sin(dLon / 2);
+    Math.sin(dLon / 2) ** 2;
 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
-function findNearbyLocations(lat, lon, radiusKm = 5) {
+
+function getNearbyLocations(lat, lon, radiusKm) {
   return state.items
     .map((it) => {
       const [itemLng, itemLat] = it.feature.geometry.coordinates;
@@ -816,10 +828,12 @@ function findNearbyLocations(lat, lon, radiusKm = 5) {
     .filter((x) => x.distanceKm <= radiusKm)
     .sort((a, b) => a.distanceKm - b.distanceKm);
 }
-function renderNearbyLocations(lat, lon, radiusKm = 5) {
-  const results = findNearbyLocations(lat, lon, radiusKm);
 
-  els.nearbyMeta.textContent = `${results.length} entro ${radiusKm} km`;
+function renderNearbyLocations(lat, lon) {
+  const radiusKm = Number(els.nearbyRadius.value || 5);
+  const results = getNearbyLocations(lat, lon, radiusKm);
+
+  els.nearbyCount.textContent = results.length;
 
   if (!results.length) {
     els.nearbyList.innerHTML = `
@@ -829,34 +843,51 @@ function renderNearbyLocations(lat, lon, radiusKm = 5) {
     `;
     return;
   }
-
-  els.nearbyList.innerHTML = results.map(({ item, distanceKm }) => {
+ 
+els.nearbyRadius.addEventListener("change", () => {
+  if (
+    Number.isFinite(state.lastSearchLat) &&
+    Number.isFinite(state.lastSearchLon)
+  ) {
+    renderNearbyLocations(state.lastSearchLat, state.lastSearchLon);
+  }
+});
+ 
+  els.nearbyList.innerHTML = results.map(({ item, distanceKm }, index) => {
     const p = item.feature.properties || {};
-
     const name = escapeHtml(p.name || "Esercente");
     const group = escapeHtml(groupValue(p));
-    const category = escapeHtml(p.establishment_category || "");
     const city = escapeHtml(p.address_city || "");
-    const address = escapeHtml(
-      [p.address_line_1, p.address_zipcode, p.address_city, p.address_district]
-        .filter(Boolean)
-        .join(", ")
-    );
+    const category = escapeHtml(p.establishment_category || "");
 
     return `
-      <div class="nearby-item">
+      <div class="nearby-item" data-nearby-index="${index}">
         <div class="nearby-name">${name}</div>
-        <div class="nearby-meta-line">
+        <div class="nearby-meta">
           ${category ? `<div><strong>Categoria:</strong> ${category}</div>` : ""}
           <div><strong>Gruppo:</strong> ${group}</div>
           ${city ? `<div><strong>Città:</strong> ${city}</div>` : ""}
-          ${address ? `<div><strong>Indirizzo:</strong> ${address}</div>` : ""}
         </div>
         <span class="nearby-distance">${distanceKm.toFixed(2)} km</span>
       </div>
     `;
   }).join("");
+
+  const nodes = els.nearbyList.querySelectorAll(".nearby-item");
+  nodes.forEach((node, index) => {
+    node.addEventListener("click", () => {
+      const result = results[index];
+      if (!result) return;
+
+      const marker = result.item.marker;
+      const ll = marker.getLatLng();
+
+      map.setView(ll, 17);
+      marker.openPopup();
+    });
+  });
 }
+
     async function init() {
       const res = await fetch("./locations.geojson", { cache: "no-store" });
       if (!res.ok) throw new Error("Impossibile caricare locations.geojson");
