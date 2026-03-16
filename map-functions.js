@@ -30,7 +30,10 @@
       searchBtn: document.getElementById("search-btn"),
       results: document.getElementById("results"),
       status: document.getElementById("status"),
-      searchWrap: document.querySelector(".search-wrap")
+      searchWrap: document.querySelector(".search-wrap"),
+      nearbyBox: document.getElementById("nearby-box"),
+      nearbyMeta: document.getElementById("nearby-meta"),
+      nearbyList: document.getElementById("nearby-list"),
     };
 
     const state = {
@@ -713,25 +716,24 @@ function setSearchMarker(lat, lon, label) {
     }
 
     function chooseDirectAddress(item) {
-      const lat = parseFloat(item.lat);
-      const lon = parseFloat(item.lon);
+  const lat = parseFloat(item.lat);
+  const lon = parseFloat(item.lon);
 
-      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-        setStatus("Coordinate non valide.");
-        return;
-      }
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    setStatus("Coordinate non valide.");
+    return;
+  }
 
-      els.address.value = item.display_name;
-      clearSearchResults();
-      setSearchMarker(lat, lon, item.display_name);
-      setStatus("Indirizzo trovato.");
-    }
+  els.address.value = item.display_name;
+  clearSearchResults();
+  setSearchMarker(lat, lon, item.display_name);
 
-    function chooseAddressResult(index) {
-      const item = currentResults[index];
-      if (!item) return;
-      chooseDirectAddress(item);
-    }
+  applyAddressToFilters(item);
+
+  renderNearbyLocations(lat, lon, 5);
+
+  setStatus("Indirizzo trovato e filtri aggiornati.");
+}
 
     async function fetchAddresses(query, limit = 5) {
       const url =
@@ -783,6 +785,78 @@ function setSearchMarker(lat, lon, label) {
       }
     }
 
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const toRad = (deg) => deg * Math.PI / 180;
+  const R = 6371;
+
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) *
+    Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) *
+    Math.sin(dLon / 2);
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+function findNearbyLocations(lat, lon, radiusKm = 5) {
+  return state.items
+    .map((it) => {
+      const [itemLng, itemLat] = it.feature.geometry.coordinates;
+      const distanceKm = haversineKm(lat, lon, itemLat, itemLng);
+
+      return {
+        item: it,
+        distanceKm
+      };
+    })
+    .filter((x) => x.distanceKm <= radiusKm)
+    .sort((a, b) => a.distanceKm - b.distanceKm);
+}
+function renderNearbyLocations(lat, lon, radiusKm = 5) {
+  const results = findNearbyLocations(lat, lon, radiusKm);
+
+  els.nearbyMeta.textContent = `${results.length} entro ${radiusKm} km`;
+
+  if (!results.length) {
+    els.nearbyList.innerHTML = `
+      <div class="nearby-empty">
+        Nessun esercente trovato entro ${radiusKm} km.
+      </div>
+    `;
+    return;
+  }
+
+  els.nearbyList.innerHTML = results.map(({ item, distanceKm }) => {
+    const p = item.feature.properties || {};
+
+    const name = escapeHtml(p.name || "Esercente");
+    const group = escapeHtml(groupValue(p));
+    const category = escapeHtml(p.establishment_category || "");
+    const city = escapeHtml(p.address_city || "");
+    const address = escapeHtml(
+      [p.address_line_1, p.address_zipcode, p.address_city, p.address_district]
+        .filter(Boolean)
+        .join(", ")
+    );
+
+    return `
+      <div class="nearby-item">
+        <div class="nearby-name">${name}</div>
+        <div class="nearby-meta-line">
+          ${category ? `<div><strong>Categoria:</strong> ${category}</div>` : ""}
+          <div><strong>Gruppo:</strong> ${group}</div>
+          ${city ? `<div><strong>Città:</strong> ${city}</div>` : ""}
+          ${address ? `<div><strong>Indirizzo:</strong> ${address}</div>` : ""}
+        </div>
+        <span class="nearby-distance">${distanceKm.toFixed(2)} km</span>
+      </div>
+    `;
+  }).join("");
+}
     async function init() {
       const res = await fetch("./locations.geojson", { cache: "no-store" });
       if (!res.ok) throw new Error("Impossibile caricare locations.geojson");
