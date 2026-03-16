@@ -280,6 +280,7 @@
         state.groupsTouched = true;
         state.selectedGroups = new Set(arr);
         applyFilters();
+       refreshNearbyListIfPossible();
       },
     });
 
@@ -289,6 +290,7 @@
         state.selectedServices = new Set(arr);
         syncGroups();
         applyFilters();
+       refreshNearbyListIfPossible();
       },
     });
 
@@ -325,6 +327,7 @@
         cascadeGeoOptions();
         syncGroups();
         applyFilters();
+       refreshNearbyListIfPossible();
       },
     });
 
@@ -339,6 +342,7 @@
         cascadeGeoOptions();
         syncGroups();
         applyFilters();
+       refreshNearbyListIfPossible();
       },
     });
 
@@ -351,6 +355,7 @@
         cascadeGeoOptions();
         syncGroups();
         applyFilters();
+       refreshNearbyListIfPossible();
       },
     });
 
@@ -588,6 +593,7 @@ els.nearbyList.innerHTML = `
 
       syncGroups();
       applyFilters();
+     refreshNearbyListIfPossible();
     }
 
     function setStatus(text) {
@@ -782,6 +788,7 @@ function applyAddressToFilters(item) {
 
   syncGroups();
   applyFilters();
+ refreshNearbyListIfPossible();
 }
 
    function chooseDirectAddress(item) {
@@ -875,6 +882,18 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 
 function getNearbyLocations(lat, lon, radiusKm) {
   return state.items
+    .filter((it) => {
+      const p = it.feature.properties || {};
+
+      if (!passesNonGroupFilters(p)) return false;
+
+      const g = groupValue(p);
+      if (state.selectedGroups.size > 0 && !state.selectedGroups.has(g)) {
+        return false;
+      }
+
+      return true;
+    })
     .map((it) => {
       const [itemLng, itemLat] = it.feature.geometry.coordinates;
       const distanceKm = haversineKm(lat, lon, itemLat, itemLng);
@@ -886,6 +905,15 @@ function getNearbyLocations(lat, lon, radiusKm) {
     })
     .filter((x) => x.distanceKm <= radiusKm)
     .sort((a, b) => a.distanceKm - b.distanceKm);
+}
+
+function refreshNearbyListIfPossible() {
+  if (
+    Number.isFinite(state.lastSearchLat) &&
+    Number.isFinite(state.lastSearchLon)
+  ) {
+    renderNearbyLocations(state.lastSearchLat, state.lastSearchLon);
+  }
 }
 
 function renderNearbyLocations(lat, lon) {
@@ -961,11 +989,13 @@ function renderNearbyLocations(lat, lon) {
       rebuildFilters(geojson.features);
       syncGroups();
       applyFilters();
+     refreshNearbyListIfPossible();
     }
 
     els.category.addEventListener("change", () => {
       syncGroups();
       applyFilters();
+     refreshNearbyListIfPossible();
     });
 
     els.reset.addEventListener("click", (e) => {
