@@ -725,6 +725,67 @@ function setSearchMarker(lat, lon, label) {
       setActiveResult(0);
     }
 
+function chooseAddressResult(index) {
+  const item = currentResults[index];
+  if (!item) return;
+  chooseDirectAddress(item);
+}
+
+function findProvinceCodeByName(provinceName, regionName = "") {
+  const provinceNorm = norm(provinceName);
+  const regionNorm = norm(regionName);
+
+  if (!provinceNorm || !window.PROVINCE_INFO) return "";
+
+  for (const [code, info] of Object.entries(window.PROVINCE_INFO)) {
+    const infoName = norm(info.name || "");
+    const infoRegion = norm(info.region || "");
+
+    if (infoName === provinceNorm) {
+      if (!regionNorm || infoRegion === regionNorm) {
+        return code;
+      }
+    }
+  }
+
+  return "";
+}
+
+function applyAddressToFilters(item) {
+  const a = item.address || {};
+
+  const region = (a.state || "").trim();
+  const city = (a.city || a.town || a.village || a.hamlet || "").trim();
+
+  const rawCounty = (a.county || a.province || "").trim();
+  const provinceName = rawCounty
+    .replace(/^Provincia di\s+/i, "")
+    .replace(/^Città Metropolitana di\s+/i, "")
+    .trim();
+
+  const provinceCode = findProvinceCodeByName(provinceName, region);
+
+  state.manualRegions.clear();
+  state.derivedRegions.clear();
+  state.selectedProvinces.clear();
+  state.selectedCities.clear();
+
+  if (region) state.manualRegions.add(region);
+  if (provinceCode) state.selectedProvinces.add(provinceCode);
+  if (city) state.selectedCities.add(city);
+
+  recomputeDerivedRegions();
+
+  ddRegion.setSelected([...effectiveRegions()], { silent: true });
+  cascadeGeoOptions();
+
+  ddProvince.setSelected([...state.selectedProvinces], { silent: true });
+  ddCity.setSelected([...state.selectedCities], { silent: true });
+
+  syncGroups();
+  applyFilters();
+}
+
    function chooseDirectAddress(item) {
   const lat = parseFloat(item.lat);
   const lon = parseFloat(item.lon);
@@ -844,14 +905,6 @@ function renderNearbyLocations(lat, lon) {
     return;
   }
  
-els.nearbyRadius.addEventListener("change", () => {
-  if (
-    Number.isFinite(state.lastSearchLat) &&
-    Number.isFinite(state.lastSearchLon)
-  ) {
-    renderNearbyLocations(state.lastSearchLat, state.lastSearchLon);
-  }
-});
  
   els.nearbyList.innerHTML = results.map(({ item, distanceKm }, index) => {
     const p = item.feature.properties || {};
@@ -923,6 +976,14 @@ els.nearbyRadius.addEventListener("change", () => {
     });
 
     els.searchBtn.addEventListener("click", searchAddress);
+els.nearbyRadius.addEventListener("change", () => {
+  if (
+    Number.isFinite(state.lastSearchLat) &&
+    Number.isFinite(state.lastSearchLon)
+  ) {
+    renderNearbyLocations(state.lastSearchLat, state.lastSearchLon);
+  }
+});
 
     els.address.addEventListener("input", () => {
       const query = els.address.value.trim();
